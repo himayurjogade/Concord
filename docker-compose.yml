@@ -1,0 +1,73 @@
+x-coordinator: &coordinator
+  build: ./coordinator-node
+  restart: unless-stopped
+  healthcheck:
+    interval: 5s
+    timeout: 2s
+    retries: 3
+    start_period: 3s
+
+services:
+  node-1:
+    <<: *coordinator
+    container_name: concord-node-1
+    environment:
+      NODE_ID: node-1
+      PORT: 5001
+      PEERS: http://node-2:5002,http://node-3:5003
+      DATA_DIR: /app/data
+    ports: ["5001:5001"]
+    volumes: [node-1-data:/app/data]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5001/health"]
+
+  node-2:
+    <<: *coordinator
+    container_name: concord-node-2
+    environment:
+      NODE_ID: node-2
+      PORT: 5002
+      PEERS: http://node-1:5001,http://node-3:5003
+      DATA_DIR: /app/data
+    ports: ["5002:5002"]
+    volumes: [node-2-data:/app/data]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5002/health"]
+
+  node-3:
+    <<: *coordinator
+    container_name: concord-node-3
+    environment:
+      NODE_ID: node-3
+      PORT: 5003
+      PEERS: http://node-1:5001,http://node-2:5002
+      DATA_DIR: /app/data
+    ports: ["5003:5003"]
+    volumes: [node-3-data:/app/data]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5003/health"]
+
+  gateway:
+    build: ./gateway
+    container_name: concord-gateway
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      NODES: http://node-1:5001,http://node-2:5002,http://node-3:5003
+    ports: ["4000:4000"]
+    depends_on:
+      node-1: { condition: service_healthy }
+      node-2: { condition: service_healthy }
+      node-3: { condition: service_healthy }
+
+  frontend:
+    build: ./frontend
+    container_name: concord-frontend
+    restart: unless-stopped
+    ports: ["5173:5173"]
+    depends_on: [gateway]
+
+volumes:
+  node-1-data:
+  node-2-data:
+  node-3-data:

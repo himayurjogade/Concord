@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const LamportClock = require('../clocks/lamportClock');
 const { increment, merge } = require('../clocks/vectorClock');
 const { findConflict, resolve } = require('../merge/conflictResolver');
@@ -10,6 +12,45 @@ const doc = {
   log: [],
   conflicts: [],
 };
+
+// each node keeps its own replica on disk, so a full cluster restart loses nothing
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const DATA_FILE = path.join(DATA_DIR, `${process.env.NODE_ID || 'node-1'}.json`);
+
+function persist() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = DATA_FILE + '.tmp';
+  fs.writeFileSync(
+    tmp,
+    JSON.stringify({
+      text: doc.text,
+      version: doc.version,
+      lamport: doc.lamport.value,
+      vectorClock: doc.vectorClock,
+      log: doc.log,
+      conflicts: doc.conflicts,
+    })
+  );
+  // rename is atomic, a crash mid write can never leave a half written file
+  fs.renameSync(tmp, DATA_FILE);
+}
+
+function restore() {
+  if (!fs.existsSync(DATA_FILE)) return false;
+  try {
+    const saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    doc.text = saved.text;
+    doc.version = saved.version;
+    doc.lamport.time = saved.lamport;
+    doc.vectorClock = saved.vectorClock;
+    doc.log = saved.log;
+    doc.conflicts = saved.conflicts;
+    return true;
+  } catch (err) {
+    console.warn(`could not restore ${DATA_FILE}, starting empty:`, err.message);
+    return false;
+  }
+}
 
 // centralized mutual exclusion: one edit inside the critical section at a time
 let locked = false;
@@ -103,6 +144,7 @@ async function submitEdit({ clientId, op, vectorClock = {}, lamport = 0 }) {
         entry.status = 'discarded';
         doc.log.push(entry);
         doc.vectorClock = merge(doc.vectorClock, editVC);
+        persist();
         return { entry, conflict, doc: publicDoc() };
       }
 
@@ -113,6 +155,7 @@ async function submitEdit({ clientId, op, vectorClock = {}, lamport = 0 }) {
     doc.version += 1;
     doc.vectorClock = merge(doc.vectorClock, editVC);
     doc.log.push(entry);
+    persist();
 
     return { entry, conflict, doc: publicDoc() };
   });
@@ -126,4 +169,4 @@ function getState() {
   };
 }
 
-module.exports = { doc, submitEdit, getState, publicDoc, applyOp, withLock };
+module.exports = { doc, submitEdit, getState, publicDoc, applyOp, withLock, persist, restore, DATA_FILE };

@@ -101,6 +101,24 @@ Already implemented, to be demonstrated in FA-2.
 | **Beacon protocol** | `heartbeat/beacon.js` | The leader beacons every 800ms. Silence longer than a follower's 1500 to 3000ms election timeout is interpreted as death. |
 | **Replication** | `beacon.js` and `globalStateSync.js`, `applySnapshot()` | A full document snapshot is piggybacked onto every beacon. |
 
+### FA-2: Unit 4, Emerging Distributed Paradigms
+
+Explained in full in [UNIT4_EMERGING_PARADIGMS.md](UNIT4_EMERGING_PARADIGMS.md).
+
+| Concept | File | How |
+|---|---|---|
+| **Distributed object-based systems** | `coordinator-node/server.js`, `methods` table | Each coordinator is a distributed object. The `methods` table is its interface, `rpc()` is the proxy, the `/rpc` route is the skeleton. |
+| **Distributed web-based systems** | `gateway/server.js`, `gateway/routes/sync.js` | The gateway is a stateless reverse proxy and API gateway, terminating WebSocket and forwarding RPC, with a REST style HTTP API alongside. |
+| **Distributed file systems** | `state/documentState.js`, `persist()` and `restore()` | Replicated storage: every node writes its own copy of the document to `data/<node>.json` after each change and reloads it on boot. Primary copy replication with factor 3, the same model as HDFS. |
+| **Serverless architectures** | `state/documentState.js`, the `doc` object | Not serverless, and the in-memory document is the reason: a coordinator holds state across calls, which a function cannot. |
+| **Virtualization and containers** | `docker-compose.yml`, three `Dockerfile`s | Five containers on one network. Each coordinator has a health check on `/health` and a named volume for its replica. |
+| **Case study: Kubernetes** | `docker-compose.yml` `healthcheck`, `coordinator-node/server.js` `/health` | The health check is a liveness probe. Three coordinators map to a Deployment with three replicas, the gateway to a Service, `restart: unless-stopped` to a restart policy. |
+| **Case study: Hadoop** | `heartbeat/beacon.js` | Same heartbeat based failure detection as HDFS DataNodes, run in the opposite direction because the protected failure is the leader, not the replicas. |
+| **Case study: Cloudflare** | the leader node | A Cloudflare Durable Object is a managed single writer coordination point, which is what the leader is. |
+| **Case study: AWS** | `docker-compose.yml` | Three coordinators in three containers is the local version of three instances in three Availability Zones. |
+| **Blockchain / DLT** | `state/documentState.js`, `doc.log` | An append-only, ordered, replicated ledger with a trusted leader. Not a blockchain, and the contrast is the lesson. |
+| **Distributed database trade-offs** | `election/leaderElection.js`, `heartbeat/beacon.js` | CP under CAP: without a majority the system refuses writes. Asynchronous replication chooses latency over consistency in the PACELC sense. |
+
 ## Key design decisions
 
 **One coordinator codebase, three identities.** `NODE_ID`, `PORT` and `PEERS`
@@ -136,8 +154,14 @@ other mechanism in the system exists because of that third outcome.
 
 ## Known limitations
 
-- **In memory only.** Killing all three coordinators loses the document.
-  Durability would need a write ahead log on disk.
+- **Persistence is a full snapshot per write.** Each node rewrites its entire
+  state file after every change. Correct and atomic (write to temp, then rename),
+  but O(document size) per keystroke. A write ahead log would make it O(edit).
+- **A restarted node with newer data than the current leader loses it.** If two
+  stale nodes elect each other before a fresher node returns, the fresher node's
+  extra edits are overwritten once the leader's version catches up. Full Raft
+  prevents this with log matching. Acceptable here because nodes are restarted
+  together in practice.
 - **Whole text replacement in the client.** A remote edit resets the textarea and
   moves the caret. The real fix is Operational Transformation or a CRDT.
 - **Marker free global snapshot.** `collectGlobalState` gathers node states but

@@ -268,22 +268,47 @@ scale them without buying hardware.
 
 ### How Concord uses it
 
-**Not used.** Concord runs three coordinator nodes as three OS processes on one
-machine, separated by port number rather than by virtualization.
+**Open `docker-compose.yml`.** The whole system runs as five containers on one
+virtual network:
 
-The honest and useful answer is how it *would* apply:
+```
+concord-node-1     built from coordinator-node/Dockerfile
+concord-node-2     same image, different environment
+concord-node-3     same image, different environment
+concord-gateway    built from gateway/Dockerfile
+concord-frontend   built from frontend/Dockerfile
+```
 
-- Each coordinator node is already designed for it. One codebase configured
-  entirely by the environment variables `NODE_ID`, `PORT` and `PEERS`, which is
-  exactly the shape a container image needs.
-- A `docker-compose.yml` with three coordinator containers plus a gateway
-  container would run the same code unchanged.
-- Because state is in memory and nodes are interchangeable, a container
-  orchestrator could add or remove coordinators at runtime.
+Three things in that file are the virtualization lesson:
 
-Saying "we did not virtualize, but the node is already twelve-factor and
-container ready, and here is why" is a much stronger answer than claiming
-something the repository does not contain.
+- **One image, three identities.** All three coordinators are built from the
+  same `Dockerfile`. They differ only in `NODE_ID`, `PORT` and `PEERS`. This is
+  only possible because the node was written to be configured entirely by
+  environment variables.
+- **Service discovery by name.** Inside the network, `PEERS` is
+  `http://node-2:5002,http://node-3:5003`. Docker's DNS resolves `node-2` to
+  whichever container currently holds that name. The code does not know or care
+  what IP address that is.
+- **A volume per node.** Each coordinator mounts its own named volume at
+  `/app/data` for its replica. Destroy every container with
+  `docker compose down`, bring them back with `docker compose up`, and each node
+  reloads its own copy of the document from its own volume.
+
+The demo: `docker stop concord-node-2` kills a node for real, not a simulated
+crash. The election runs, a new leader appears, and `docker start
+concord-node-2` brings it back to reload from disk and rejoin as a follower.
+
+> **Q: Containers or virtual machines?**
+> Containers. A VM virtualizes hardware and runs a full operating system. A
+> container virtualizes only the process space and shares the host kernel, so it
+> starts in under a second and uses a fraction of the memory. For five small
+> Node processes, containers are the right tool.
+
+> **Q: What does the health check do?**
+> Docker calls `/health` on each coordinator every five seconds. The gateway's
+> `depends_on` waits for all three to report healthy before it starts, so it
+> never boots into a cluster with no leader. That is the same idea as a
+> Kubernetes readiness probe.
 
 ---
 

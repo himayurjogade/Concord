@@ -48,7 +48,9 @@ const methods = {
 
   beacon: (params) => {
     const reply = election.handleBeacon(params);
-    if (reply.ok && params.snapshot) applySnapshot(docState.doc, params.snapshot);
+    if (reply.ok && params.snapshot && applySnapshot(docState.doc, params.snapshot)) {
+      docState.persist();
+    }
     return reply;
   },
 
@@ -109,5 +111,8 @@ app.get('/health', (_req, res) => res.json({ nodeId: NODE_ID, dead, role: electi
 app.listen(PORT, () => {
   console.log(`[${NODE_ID}] listening on ${SELF_URL}`);
   console.log(`[${NODE_ID}] peers: ${PEERS.map((p) => p.url).join(', ') || 'none'}`);
+  if (docState.restore()) {
+    console.log(`[${NODE_ID}] restored v${docState.doc.version} from ${docState.DATA_FILE}`);
+  }
   election.start();
 });

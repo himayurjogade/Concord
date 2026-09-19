@@ -12,7 +12,7 @@ async function pollCluster() {
     NODES.map(async (url) => {
       try {
         const status = await rpc(url, 'status', {}, 800);
-        return { url, alive: true, ...status };
+        return { ...status, url, alive: true };
       } catch {
         return { url, alive: false, nodeId: url, role: 'unreachable' };
       }

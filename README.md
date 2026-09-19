@@ -4,7 +4,7 @@ A distributed collaborative document editor. Multiple people edit the same
 document at the same time, backed by several coordinator servers instead of one,
 so the system keeps working when a server dies.
 
-Distributed Systems mini project, FA-1.
+Distributed Systems mini project, FA-1 and FA-2.
 
 ## Problem statement
 
@@ -29,13 +29,18 @@ than trusting machine timestamps.
 | Unit 1: Introduction | goals, types, architectures, design issues, middleware |
 | Unit 2: Communication | fundamentals, RPC, message-oriented, stream-oriented, P2P, WebRTC |
 
-**Unit 3 is already implemented ahead of schedule** and will be demonstrated in
-FA-2: Lamport logical clocks, vector clocks, global state, leader election,
-mutual exclusion, and the beacon protocol.
+**FA-2 covers Unit 3 and Unit 4.**
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the concept to file map and
-[docs/CONCEPTS_EXPLAINED.md](docs/CONCEPTS_EXPLAINED.md) for detailed
-explanations of every concept with the exact file that implements it.
+| Unit | Topics demonstrated |
+|---|---|
+| Unit 3: Synchronization | Lamport clocks, vector clocks, global state, leader election, mutual exclusion, beacon protocol |
+| Unit 4: Emerging paradigms | distributed objects, web based systems, replicated storage with per node persistence, containerisation with Docker Compose, case study mapping |
+
+Docs:
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the concept to file map for every unit
+- [docs/CONCEPTS_EXPLAINED.md](docs/CONCEPTS_EXPLAINED.md), Units 1 and 2 explained with the exact file and function for each
+- [docs/UNIT4_EMERGING_PARADIGMS.md](docs/UNIT4_EMERGING_PARADIGMS.md), Unit 4 explained the same way
 
 ## Architecture
 
@@ -72,16 +77,44 @@ explanations of every concept with the exact file that implements it.
 ## Tech stack
 
 Node.js, Express, native `ws` for WebSocket, native WebRTC with no wrapper
-library, React with Vite. State is in memory only, no database, by design.
+library, React with Vite, Docker Compose. The document lives in memory on every
+node and each node persists its own replica to a JSON file. No database.
 
 ## Requirements
 
 - **Node.js 18 or newer.** The code uses the built in global `fetch`.
 - A modern browser for WebRTC. Chrome, Edge or Firefox.
+- **Docker** with Compose v2, only if you want the one-command start.
 
 ```bash
 node --version
+docker compose version
 ```
+
+## Quick start with Docker
+
+One command starts all five services, with health checks and persistent
+volumes:
+
+```bash
+docker compose up --build
+```
+
+Then open **http://localhost:5173**. The gateway waits until all three
+coordinators report healthy before it starts.
+
+Useful commands:
+
+```bash
+docker compose ps                 # five containers, three marked (healthy)
+docker stop concord-node-2        # kill a node for real, watch the election
+docker start concord-node-2       # bring it back, it reloads from its volume
+docker compose down               # stop everything, document is kept
+docker compose down -v            # stop everything and wipe the document
+```
+
+Skip to [Demo](#demo) if this worked. The rest of this section is the manual
+setup without Docker.
 
 ## Install
 
@@ -93,7 +126,7 @@ cd gateway          && npm install && cd ..
 cd frontend         && npm install && cd ..
 ```
 
-## Run
+## Run without Docker
 
 Five terminals. Start the coordinators first, then the gateway, then the
 frontend. Use absolute paths so it does not matter which folder each terminal
@@ -160,7 +193,7 @@ a majority, and retried. It recovers on its own.
 
 ## Demo
 
-Five things, in this order.
+Seven things, in this order. The first five are FA-1, the last two are FA-2.
 
 **1. Architecture (Unit 1).** Point at the five running terminals, then at the
 Cluster panel in the browser showing three nodes, their roles, and the document
@@ -190,6 +223,14 @@ Then the proof: **stop the gateway with Ctrl-C.** Document sync dies, the
 connection indicator goes red, but P2P chat between the two tabs keeps working,
 because that data was never passing through the server. Restart the gateway and
 everything recovers.
+
+**6. Leader failover (Unit 3).** Click **Kill leader** in the Cluster panel. A
+follower is elected within about two seconds and typing keeps working. Or, under
+Docker, `docker stop` the leader's container for a real process death.
+
+**7. Persistence (Unit 4).** Stop all three coordinators. Start them again. Each
+prints `restored vN from .../node-X.json` and the document is exactly where you
+left it. Every node holds its own replica on disk.
 
 ## Testing without a browser
 
@@ -247,10 +288,13 @@ Revive one from the Cluster panel.
 ```
 concord/
 ├── README.md
+├── docker-compose.yml           five services, health checks, one volume per node
 ├── docs/
-│   ├── ARCHITECTURE.md          concept to file map
-│   └── CONCEPTS_EXPLAINED.md    detailed explanations, viva prep
+│   ├── ARCHITECTURE.md              concept to file map
+│   ├── CONCEPTS_EXPLAINED.md        units 1 and 2, viva prep
+│   └── UNIT4_EMERGING_PARADIGMS.md  unit 4, viva prep
 ├── gateway/                     single entry point, port 4000, stateless
+│   ├── Dockerfile
 │   ├── server.js                HTTP + WebSocket + broadcast
 │   ├── rpc.js                   RPC client stub
 │   ├── cluster.js               leader tracking, transparent failover
@@ -258,6 +302,8 @@ concord/
 │   └── signaling/
 │       └── webrtc-relay.js      forwards SDP and ICE only
 ├── coordinator-node/            one codebase, run 3x with different env vars
+│   ├── Dockerfile
+│   ├── data/                    one JSON replica per node, gitignored
 │   ├── server.js                RPC dispatcher and wiring
 │   ├── rpc.js                   RPC client stub
 │   ├── clocks/
@@ -270,9 +316,10 @@ concord/
 │   ├── merge/
 │   │   └── conflictResolver.js  detect and resolve deterministically
 │   └── state/
-│       ├── documentState.js     the document and mutual exclusion
+│       ├── documentState.js     the document, mutual exclusion, persistence
 │       └── globalStateSync.js   replication and global snapshot
 └── frontend/                    React and Vite, port 5173
+    ├── Dockerfile
     └── src/
         ├── App.jsx
         ├── hooks/
@@ -290,7 +337,9 @@ concord/
 
 Deliberate, and in scope for a mini project.
 
-- **In memory only.** Stopping all three coordinators loses the document.
+- **Persistence is a snapshot, not a log.** Each node writes its whole state to
+  one JSON file after every change. Fine for a document, would not scale to a
+  large dataset, where a write ahead log is the standard answer.
 - **Whole text replacement in the client.** A remote edit resets the textarea and
   moves your caret. The real fix is Operational Transformation or a CRDT.
 - **Asynchronous replication.** The leader does not wait for follower

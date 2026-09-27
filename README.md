@@ -340,8 +340,10 @@ Deliberate, and in scope for a mini project.
 - **Persistence is a snapshot, not a log.** Each node writes its whole state to
   one JSON file after every change. Fine for a document, would not scale to a
   large dataset, where a write ahead log is the standard answer.
-- **Whole text replacement in the client.** A remote edit resets the textarea and
-  moves your caret. The real fix is Operational Transformation or a CRDT.
+- **Whole text replacement in the client.** A remote edit replaces the textarea
+  value. Your caret is shifted by the remote edit so it stays put, but nothing
+  is transformed against your own in-flight edits. The real fix is Operational
+  Transformation or a CRDT.
 - **Asynchronous replication.** The leader does not wait for follower
   acknowledgement, so a crash inside the 800ms beacon window can lose the most
   recent edits.

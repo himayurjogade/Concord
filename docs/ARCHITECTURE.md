@@ -86,16 +86,16 @@ balancer with no coordination between them.
 | **Self study: names, identifiers, addresses** | `gateway/server.js`, `crypto.randomUUID()` | Each client gets a unique identifier at connection time. It names the client in vector clocks and addresses it for signaling, independent of its network address. |
 | **Self study: fault tolerance** | `gateway/cluster.js`, `callLeader()` | On RPC failure the gateway re-polls, finds the new leader, and retries once, so a crash surfaces as a slow edit rather than an error. |
 
-### FA-2 preview: Unit 3, Synchronization
+### FA-2: Unit 3, Synchronization
 
-Already implemented, to be demonstrated in FA-2.
+Explained in full in [UNIT3_SYNCHRONIZATION.md](UNIT3_SYNCHRONIZATION.md).
 
 | Concept | File | How |
 |---|---|---|
 | **Logical clocks, Lamport** | `clocks/lamportClock.js` | `tick()` for local events, `update(t)` applying `max(local, received) + 1`. |
 | **Vector algorithm** | `clocks/vectorClock.js` | `increment`, `merge`, `compare`. `compare` returns `'concurrent'` when neither vector dominates. |
 | **Conflict resolution** | `merge/conflictResolver.js` | `findConflict()` requires both concurrency and positional overlap. `resolve()` applies higher Lamport wins, smaller clientId breaks ties. |
-| **Global state** | `state/globalStateSync.js`, `collectGlobalState()` | Gathers every node's local state in parallel and uses vector clock comparison to judge whether the result is a consistent cut. |
+| **Global state** | `state/globalStateSync.js`, `collectGlobalState()` | Polls every node's status in parallel and flags the result consistent when all live replicas hold the same version. Vector clocks are compared per node. A polled snapshot, not Chandy-Lamport. |
 | **Election algorithms** | `election/leaderElection.js` | Randomised timeouts, monotonic terms, one vote per node per term, majority quorum, plus a log freshness check. |
 | **Mutual exclusion** | `state/documentState.js`, `acquire`/`release`/`withLock` | Centralized algorithm. The leader is the coordinator, requests are granted one at a time and queued FIFO otherwise. |
 | **Beacon protocol** | `heartbeat/beacon.js` | The leader beacons every 800ms. Silence longer than a follower's 1500 to 3000ms election timeout is interpreted as death. |
@@ -110,13 +110,14 @@ Explained in full in [UNIT4_EMERGING_PARADIGMS.md](UNIT4_EMERGING_PARADIGMS.md).
 | **Distributed object-based systems** | `coordinator-node/server.js`, `methods` table | Each coordinator is a distributed object. The `methods` table is its interface, `rpc()` is the proxy, the `/rpc` route is the skeleton. |
 | **Distributed web-based systems** | `gateway/server.js`, `gateway/routes/sync.js` | The gateway is a stateless reverse proxy and API gateway, terminating WebSocket and forwarding RPC, with a REST style HTTP API alongside. |
 | **Distributed file systems** | `state/documentState.js`, `persist()` and `restore()` | Replicated storage: every node writes its own copy of the document to `data/<node>.json` after each change and reloads it on boot. Primary copy replication with factor 3, the same model as HDFS. |
-| **Serverless architectures** | `state/documentState.js`, the `doc` object | Not serverless, and the in-memory document is the reason: a coordinator holds state across calls, which a function cannot. |
+| **Serverless architectures** | `gateway/functions/stats.js`, `GET /api/stats` | A Lambda shaped stateless function, fed the document by the stateful coordinators. The coordinator itself is not serverless, because it holds state across calls. |
 | **Virtualization and containers** | `docker-compose.yml`, three `Dockerfile`s | Five containers on one network. Each coordinator has a health check on `/health` and a named volume for its replica. |
 | **Case study: Kubernetes** | `docker-compose.yml` `healthcheck`, `coordinator-node/server.js` `/health` | The health check is a liveness probe. Three coordinators map to a Deployment with three replicas, the gateway to a Service, `restart: unless-stopped` to a restart policy. |
 | **Case study: Hadoop** | `heartbeat/beacon.js` | Same heartbeat based failure detection as HDFS DataNodes, run in the opposite direction because the protected failure is the leader, not the replicas. |
 | **Case study: Cloudflare** | the leader node | A Cloudflare Durable Object is a managed single writer coordination point, which is what the leader is. |
 | **Case study: AWS** | `docker-compose.yml` | Three coordinators in three containers is the local version of three instances in three Availability Zones. |
-| **Blockchain / DLT** | `state/documentState.js`, `doc.log` | An append-only, ordered, replicated ledger with a trusted leader. Not a blockchain, and the contrast is the lesson. |
+| **Case study: Megaport** | `frontend/src/hooks/useWebRTC.js`, `gateway/` | Weak analogy: Megaport separates control plane from data plane. The leader controls document state while WebRTC carries cursor and chat traffic directly between peers. |
+| **Blockchain / DLT** | `coordinator-node/state/hashChain.js`, `doc.log` | A hash-chained, append-only, replicated log. `verify` RPC and a boot-time check detect tampering. Not a blockchain, because the leader is trusted to order entries. |
 | **Distributed database trade-offs** | `election/leaderElection.js`, `heartbeat/beacon.js` | CP under CAP: without a majority the system refuses writes. Asynchronous replication chooses latency over consistency in the PACELC sense. |
 
 ## Key design decisions

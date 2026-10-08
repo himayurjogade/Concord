@@ -5,6 +5,7 @@ const LeaderElection = require('./election/leaderElection');
 const { startBeacon } = require('./heartbeat/beacon');
 const docState = require('./state/documentState');
 const { snapshot, applySnapshot, collectGlobalState } = require('./state/globalStateSync');
+const hashChain = require('./state/hashChain');
 
 const NODE_ID = process.env.NODE_ID || 'node-1';
 const PORT = Number(process.env.PORT || 5001);
@@ -55,6 +56,8 @@ const methods = {
   },
 
   getState: () => docState.getState(),
+
+  verify: () => ({ nodeId: NODE_ID, ...hashChain.verify(docState.doc.log) }),
 
   submitEdit: (params) => {
     if (election.role !== 'leader') {
@@ -113,6 +116,7 @@ app.listen(PORT, () => {
   console.log(`[${NODE_ID}] peers: ${PEERS.map((p) => p.url).join(', ') || 'none'}`);
   if (docState.restore()) {
     console.log(`[${NODE_ID}] restored v${docState.doc.version} from ${docState.DATA_FILE}`);
+    console.log(`[${NODE_ID}] log chain:`, JSON.stringify(hashChain.verify(docState.doc.log)));
   }
   election.start();
 });

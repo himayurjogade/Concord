@@ -40,6 +40,7 @@ Docs:
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the concept to file map for every unit
 - [docs/CONCEPTS_EXPLAINED.md](docs/CONCEPTS_EXPLAINED.md), Units 1 and 2 explained with the exact file and function for each
+- [docs/UNIT3_SYNCHRONIZATION.md](docs/UNIT3_SYNCHRONIZATION.md), Unit 3 explained the same way
 - [docs/UNIT4_EMERGING_PARADIGMS.md](docs/UNIT4_EMERGING_PARADIGMS.md), Unit 4 explained the same way
 
 ## Architecture
@@ -292,6 +293,7 @@ concord/
 ├── docs/
 │   ├── ARCHITECTURE.md              concept to file map
 │   ├── CONCEPTS_EXPLAINED.md        units 1 and 2, viva prep
+│   ├── UNIT3_SYNCHRONIZATION.md     unit 3, viva prep
 │   └── UNIT4_EMERGING_PARADIGMS.md  unit 4, viva prep
 ├── gateway/                     single entry point, port 4000, stateless
 │   ├── Dockerfile

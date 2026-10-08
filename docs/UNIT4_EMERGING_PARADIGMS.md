@@ -18,14 +18,14 @@ Where Concord stands for each topic:
 | Distributed object-based systems | **implemented**, the RPC layer is a remote object interface |
 | Distributed web-based systems | **implemented**, the whole system is web based |
 | Distributed file systems | **implemented in miniature**, replicated storage with a copy per node on disk |
-| Serverless architectures | **not used**, and the design explains why it cannot be |
+| Serverless architectures | **one stateless function** (`GET /api/stats`), and the design explains why the rest cannot be serverless |
 | Virtualization and containers | **implemented**, Docker Compose with health checks and volumes |
 | Cloudflare | strong analogy, Durable Objects |
 | AWS | deployment mapping |
 | Apache Hadoop | strong analogy, NameNode/DataNode and replication factor 3 |
 | Kubernetes | strong analogy, and the compose file already speaks its language |
 | Megaport | weak analogy, know what it is |
-| Blockchain / DLT | the log is a ledger, but a trusted one, and the contrast is the point |
+| Blockchain / DLT | **hash-chained log**, tamper evident, but the leader is still trusted |
 | Distributed database trade-offs | **demonstrable**, Concord is a CP system and you can prove it live |
 
 ---
@@ -245,9 +245,19 @@ between calls, and two calls may run on different machines.
 
 ### How Concord uses it
 
-**Concord is not serverless, and the reason is instructive.**
+**Concord is mostly not serverless, and the reason is instructive. One piece is.**
 
-Go through each part:
+`gateway/functions/stats.js` is a Lambda shaped function: `handler(event)` returns
+`{ statusCode, body }`, keeps nothing between calls, and reads everything from the
+event. `GET /api/stats` fetches the document from the stateful coordinators and
+passes the text in. The function counts characters, words and lines. The same file
+could be pasted into AWS Lambda unchanged. Notice what had to happen: **the state
+stayed in the coordinators and was handed to the function**. That is the serverless
+rule in miniature.
+
+Demo: `curl http://localhost:4000/api/stats`
+
+Part by part:
 
 | Component | Could it be serverless? | Why |
 |---|---|---|
@@ -468,12 +478,40 @@ Those are the ledger properties. Every edit ever made is recorded with who made
 it, when in logical time, and what it did. The Version Timeline in the UI is a
 ledger viewer.
 
-**What makes it not a blockchain:**
+**It is hash-chained.** `state/hashChain.js`: when an edit is finalised, `seal()`
+stores `prevHash` (the previous entry's hash) and `hash` (SHA-256 of the whole
+entry, including `prevHash`). Change any past entry and its hash no longer matches,
+and even if the attacker recomputes that hash, the next entry's `prevHash` no longer
+points at it. `verify()` finds the first broken entry. The Version Timeline shows
+the first 8 characters of each entry's hash and its predecessor's.
+
+Demo, tamper detection:
+
+```bash
+# every node checks its own copy
+curl -s -X POST http://localhost:5001/rpc -H 'Content-Type: application/json' -d '{"method":"verify"}'
+
+# corrupt node-1's saved copy while it is stopped, then start it again
+docker compose stop node-1
+docker run --rm -v concord_node-1-data:/d node:20-alpine sed -i 's/"clientId":"u-/"clientId":"x-/' /d/node-1.json
+docker compose start node-1
+docker compose logs node-1 | grep "log chain"
+```
+
+The log line reads `log chain: {"ok":false,"brokenAt":1,"reason":"entry was modified"}`.
+`node coordinator-node/state/hashChain.js` runs a self check.
+
+Two honest limits. A follower is healed by the next beacon, which overwrites its log
+with the leader's, so tampering with a follower is detected at boot and then
+repaired. And replicas keep only the last 80 entries, so the chain is checked over
+that window.
+
+**What still makes it not a blockchain:**
 
 | Blockchain property | Concord |
 |---|---|
-| entries hash-linked to the previous entry | no hashes, entries are plain objects |
-| tamper evident | not tamper evident, the leader could rewrite the log |
+| entries hash-linked to the previous entry | **yes**, `prevHash` and `hash` |
+| tamper evident | **yes** for past entries, but the leader could rewrite the whole chain consistently |
 | no trusted party decides order | the leader is fully trusted to decide order |
 | consensus via proof of work, stake or BFT | consensus via majority election, which trusts elected nodes |
 
@@ -485,12 +523,12 @@ the protocol must produce agreement anyway. Raft is far cheaper and is the right
 choice when all nodes are run by one organisation. Blockchain consensus is the
 right choice when they are not.
 
-> **Q: Could you make the log a blockchain?**
-> Adding a `prevHash` field to each log entry, computed as the SHA-256 of the
-> previous entry, would make it tamper evident in a few lines. But it would still
-> not be a blockchain in the meaningful sense, because the leader would still be
-> trusted to decide the order. The hash chain detects tampering after the fact.
-> It does not remove the trusted party.
+> **Q: Is your log a blockchain?**
+> It has the data structure, a hash-linked append-only log, so tampering with a
+> past entry is detected. But it is not a blockchain in the meaningful sense,
+> because the leader is still trusted to decide the order and could rewrite the
+> whole chain consistently. The hash chain detects tampering after the fact. It
+> does not remove the trusted party.
 
 > **Q: What is a smart contract, and does Concord have anything like it?**
 > Code that runs deterministically on every node as part of applying a ledger

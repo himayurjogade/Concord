@@ -15,7 +15,7 @@ export default function VersionTimeline({ log, myId }) {
   return (
     <div className="panel">
       <h2>Version Timeline</h2>
-      <p className="sub">newest first, L is the lamport timestamp, VC is the vector clock</p>
+      <p className="sub">newest first, L is the lamport timestamp, VC is the vector clock, each entry hashes the one before it</p>
 
       <div className="scroll">
         {recent.length === 0 && <div className="dim tiny">no edits yet</div>}
@@ -36,6 +36,9 @@ export default function VersionTimeline({ log, myId }) {
               <div className="dim tiny mono">{describeOp(entry.op)}</div>
               <div className="dim tiny mono">
                 VC [{formatVC(entry.vectorClock)}] wall {new Date(entry.wallClock).toLocaleTimeString()}
+              </div>
+              <div className="dim tiny mono">
+                hash {entry.hash?.slice(0, 8)} prev {entry.prevHash?.slice(0, 8)}
               </div>
             </div>
           );

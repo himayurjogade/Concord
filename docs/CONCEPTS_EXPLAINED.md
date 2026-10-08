@@ -5,9 +5,7 @@ Viva preparation for **FA-1, Unit 1 and Unit 2**.
 For each syllabus topic: what the concept means, then exactly how Concord uses
 it, with the file and function you can open on screen.
 
-Unit 3 work (logical clocks, vector clocks, election, mutual exclusion, beacon)
-is already implemented in this repository but belongs to FA-2. It is mapped in
-[ARCHITECTURE.md](ARCHITECTURE.md) and deliberately not explained here.
+Unit 3 and Unit 4 are FA-2. Unit 3 is explained in [UNIT3_SYNCHRONIZATION.md](UNIT3_SYNCHRONIZATION.md) and Unit 4 in [UNIT4_EMERGING_PARADIGMS.md](UNIT4_EMERGING_PARADIGMS.md).
 
 ## The system in one paragraph
 

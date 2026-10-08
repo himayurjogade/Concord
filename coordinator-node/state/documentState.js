@@ -3,6 +3,7 @@ const path = require('path');
 const LamportClock = require('../clocks/lamportClock');
 const { increment, merge } = require('../clocks/vectorClock');
 const { findConflict, resolve } = require('../merge/conflictResolver');
+const { seal } = require('./hashChain');
 
 const doc = {
   text: '',
@@ -142,6 +143,7 @@ async function submitEdit({ clientId, op, vectorClock = {}, lamport = 0 }) {
 
       if (winner === 'existing') {
         entry.status = 'discarded';
+        seal(entry, doc.log[doc.log.length - 1]);
         doc.log.push(entry);
         doc.vectorClock = merge(doc.vectorClock, editVC);
         persist();
@@ -154,6 +156,7 @@ async function submitEdit({ clientId, op, vectorClock = {}, lamport = 0 }) {
     doc.text = applyOp(doc.text, op);
     doc.version += 1;
     doc.vectorClock = merge(doc.vectorClock, editVC);
+    seal(entry, doc.log[doc.log.length - 1]);
     doc.log.push(entry);
     persist();
 

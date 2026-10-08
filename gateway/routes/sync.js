@@ -1,6 +1,7 @@
 const express = require('express');
 const { rpc } = require('../rpc');
 const { pollCluster, callLeader, getSnapshot } = require('../cluster');
+const stats = require('../functions/stats');
 
 const router = express.Router();
 
@@ -15,6 +16,17 @@ router.get('/cluster', async (_req, res) => {
 router.get('/document', async (_req, res) => {
   try {
     res.json(await callLeader('getState'));
+  } catch (err) {
+    res.status(503).json({ error: err.message });
+  }
+});
+
+// the function holds no state, the document is fetched from the stateful coordinators and passed in
+router.get('/stats', async (_req, res) => {
+  try {
+    const { text } = await callLeader('getState');
+    const out = await stats.handler({ text });
+    res.status(out.statusCode).json(JSON.parse(out.body));
   } catch (err) {
     res.status(503).json({ error: err.message });
   }

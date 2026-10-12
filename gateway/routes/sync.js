@@ -21,12 +21,32 @@ router.get('/document', async (_req, res) => {
   }
 });
 
+const STATS_URL = process.env.STATS_URL;
+
+// runs on AWS Lambda when STATS_URL is set, falls back to the same function locally if unset or unreachable
+async function runStats(text) {
+  if (STATS_URL) {
+    try {
+      const r = await fetch(STATS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(3000),
+      });
+      if (r.ok) return { ...(await r.json()), ranOn: 'aws-lambda' };
+    } catch {
+      // fall through to the local copy
+    }
+  }
+  const out = await stats.handler({ text });
+  return { ...JSON.parse(out.body), ranOn: 'local' };
+}
+
 // the function holds no state, the document is fetched from the stateful coordinators and passed in
 router.get('/stats', async (_req, res) => {
   try {
     const { text } = await callLeader('getState');
-    const out = await stats.handler({ text });
-    res.status(out.statusCode).json(JSON.parse(out.body));
+    res.json(await runStats(text));
   } catch (err) {
     res.status(503).json({ error: err.message });
   }

@@ -54,6 +54,7 @@ services:
     environment:
       PORT: 4000
       NODES: http://node-1:5001,http://node-2:5002,http://node-3:5003
+      STATS_URL: ${STATS_URL:-}
     ports: ["4000:4000"]
     depends_on:
       node-1: { condition: service_healthy }

@@ -15,6 +15,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/api', syncRoutes);
 app.get('/', (_req, res) => res.send('concord gateway is running, websocket at /ws'));
+app.get('/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });

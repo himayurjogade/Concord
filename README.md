@@ -351,3 +351,5 @@ Deliberate, and in scope for a mini project.
   recent edits.
 - **Full WebRTC mesh.** Fine for a few browsers, connection count grows as
   O(n squared), so a large room would need an SFU.
+
+Thank you!
